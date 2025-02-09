@@ -1,0 +1,12 @@
+streamlit
+pandas
+numpy
+folium
+streamlit-folium
+plotly
+Pillow
+fpdf
+twilio
+googlemaps
+firebase-admin
+requests
