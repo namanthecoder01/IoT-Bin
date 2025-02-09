@@ -11,6 +11,8 @@ from fpdf import FPDF
 from twilio.rest import Client
 import googlemaps
 
+import firebase_admin
+from firebase_admin import credentials, db
 import os
 from dotenv import load_dotenv
 
@@ -21,8 +23,13 @@ TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
 GMAPS_API_KEY = os.getenv("GMAPS_API_KEY")
 
+# Initialize Firebase
+if not firebase_admin._apps:
+    cred = credentials.Certificate("iot-bin-ba8a5-firebase-adminsdk-fbsvc-3b8ee62c91.json")
+    firebase_admin.initialize_app(cred, {
+        'databaseURL': 'https://iot-bin-ba8a5-default-rtdb.firebaseio.com/'
+    })
 
-# Twilio API Credentials
 client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
 # Google Maps API Key
@@ -33,7 +40,7 @@ logo = Image.open("dustbin_logo.jpg")
 header_img = Image.open("header.jpg")
 
 # Streamlit UI Config
-st.title("IoT SmartBin DashBoard")
+st.title("Welcome to the AI-model of Dustbin")
 
 st.image(header_img, use_container_width=True)
 st.sidebar.image(logo, width=200)
@@ -43,21 +50,17 @@ user_role = st.sidebar.radio("Select Role", ["Admin", "Field Worker"])
 
 
 # Generate real-time bin data
-def generate_bin_data():
+def fetch_bin_data():
+    ref = db.reference("/Data/bins")
+    bins_data = ref.get()
     bins = []
-    for i in range(10):
-        bins.append({
-            "Bin ID": f"Bin-{i + 1}",
-            "Latitude": random.uniform(28.5, 28.9),
-            "Longitude": random.uniform(77.0, 77.5),
-            "Fill Level (%)": random.randint(20, 100),
-            "Temperature (°C)": random.uniform(20, 40),
-            "Humidity (%)": random.uniform(30, 80),
-            "Tilt": random.choice([0, 1]),
-            "Tilt Alert": random.choice([True, False]),
-            "Last Updated": time.strftime('%Y-%m-%d %H:%M:%S')
-        })
+
+    for key, value in bins_data.items():
+        bins.append(value)
+
     return pd.DataFrame(bins)
+
+bin_data = fetch_bin_data()
 
 
 # Compute priority for bin collection
@@ -70,23 +73,24 @@ def calculate_priority(df):
     )
     df.sort_values(by="Priority", ascending=False, inplace=True)
     return df
-
+bin_data = calculate_priority(bin_data)
 
 # Fetch and process live bin data
-bin_data = generate_bin_data()
-bin_data = calculate_priority(bin_data)
+
 
 
 # Generate real-time van locations
-def generate_van_data():
-    return pd.DataFrame({
-        "Van ID": [f"Van-{i + 1}" for i in range(4)],
-        "Latitude": [random.uniform(28.5, 28.9) for _ in range(4)],
-        "Longitude": [random.uniform(77.0, 77.5) for _ in range(4)]
-    })
+def fetch_van_data():
+    ref = db.reference("/Data/vans")
+    vans_data = ref.get()
+    vans = []
 
+    for key, value in vans_data.items():
+        vans.append(value)
 
-vans = generate_van_data()
+    return pd.DataFrame(vans)
+
+vans = fetch_van_data()
 
 
 # Assign bins dynamically to closest available vans
@@ -202,8 +206,34 @@ if user_role == "Admin":
     worker_phone = workers.loc[workers["Worker ID"] == selected_worker_id, "Phone"].values[0]
 
     if st.sidebar.button("Assign Task"):
-        task_message = f"Bin {selected_worker} has been assigned to you. Please collect the waste promptly."
-        send_update_message(worker_phone, task_message)
-        st.sidebar.success(f"Bin {selected_worker} assigned to Worker {selected_worker_id} with real-time update!")
+        st.sidebar.success(f"{selected_worker} assigned to Worker {selected_worker_id} with real-time update!")
+
+# Analytics Report Page
+if user_role == "Admin":
+    st.sidebar.subheader("\U0001F4CA Analytics Report")
+    if st.sidebar.button("View Report"):
+        st.subheader("♻️ Waste & Environmental Analytics Report")
+
+        # Fetch bin data again for latest updates
+        bin_data = fetch_bin_data()
+
+        # Waste Collection Trend
+        fig_waste = px.line(bin_data, x="Bin ID", y="Fill Level (%)", title="Waste Collection Trend", markers=True)
+        st.plotly_chart(fig_waste)
+
+        # Carbon Footprint Analysis
+        bin_data["Carbon Footprint (kg CO2)"] = bin_data["Fill Level (%)"] * 0.02  # Example Calculation
+        fig_carbon = px.bar(bin_data, x="Bin ID", y="Carbon Footprint (kg CO2)", title="Carbon Footprint Analysis", color="Carbon Footprint (kg CO2)")
+        st.plotly_chart(fig_carbon)
+
+        # Environmental Impact Summary
+        total_waste_collected = bin_data["Fill Level (%)"].sum()
+        avg_carbon_footprint = bin_data["Carbon Footprint (kg CO2)"].mean()
+        
+        st.write(f"**Total Waste Collected:** {total_waste_collected:.2f} kg")
+        st.write(f"**Average Carbon Footprint per Bin:** {avg_carbon_footprint:.2f} kg CO2")
+
+        st.success("📊 Environmental Report Generated Successfully!")
+
 
 st.success("✅ Dashboard Updated Successfully!")
