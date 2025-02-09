@@ -25,7 +25,7 @@ GMAPS_API_KEY = os.getenv("GMAPS_API_KEY")
 
 # Initialize Firebase
 if not firebase_admin._apps:
-    cred = credentials.Certificate("iot-bin-ba8a5-firebase-adminsdk-fbsvc-3b8ee62c91.json")
+    cred = credentials.Certificate("iot-bin-ba8a5-firebase-adminsdk-fbsvc-8869f5df4c.json")
     firebase_admin.initialize_app(cred, {
         'databaseURL': 'https://iot-bin-ba8a5-default-rtdb.firebaseio.com/'
     })
